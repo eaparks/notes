@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
 
@@ -6,60 +6,58 @@ usage() {
 cat << EOF
 USAGE:
 
-   notes [year|"all"] [module]
+   notes [year|"all"] [quarter]
 
 EXAMPLES:
 
    notes
-      compiles notes for current year/module
+      compiles notes for current year/quarter
 
    notes all
       compiles all notes
 
-   notes 1
-      compiles notes for year 1
+   notes 2020
+      compiles notes for year 2020
 
-   notes 1 3
-      compiles notes for year 1 module 3
+   notes 2018 3
+      compiles notes for year 2018 quarter 3
 
 EOF
 }
 
 getnotes() {
-   ack --text -n "> Date: " . | \
+   ack -n "> Date: " . | \
    while read line; do
-      course=$(echo "$line" | sed 's/\([^ ]*\) .*/\1/')
+      topic=$(echo "$line" | sed 's/\([^ ]*\) .*/\1/')
       file=$(echo "$line" | sed 's/\([^:]*\):2:>.*$/\1/')
       date=$(echo "$line" | sed 's/[^:]*:2:> Date: \(.*$\)/\1/')
-      echo "$course$date $file"
+      echo "$topic$date $file"
    done | \
    sort -n | \
    while read line; do
       file=$(echo "$line" | sed 's/[^ ]* \(.*\)/\1/')
       echo "$file"
    done
-   unset course file date
+   unset topic file date
 }
 
 makepdf() {
-      pandoc --latex-engine=lualatex -H $NOTES_DIR/fonts.tex --toc \
-         -o "${1}.pdf" $NOTES_DIR/about.md $2 &&
-      echo "Created ${1}.pdf"
+   pandoc --pdf-engine=xelatex -s -H $NOTES_DIR/font.tex --toc \
+         -o "${1}.pdf" $2 &&
+   echo "Created ${1}.pdf"
 }
 
 makehtml() {
-      pandoc -w slidy -H $NOTES_DIR/slidy.html -s $2 | \
-         sed -e 's/<h[2-9]/<\/div><div class=\"slide\">&/' \
-         -e 's/slidy.js.gz/slidy.js/' > "${1}.html" &&
-         echo "Created ${1}.html"
+    pandoc -s --webtex --metadata title=$(basename $2) -i -t slidy $2 -o "${1}.html" &&
+   echo "Created ${1}.html"
 }
 
 makenotes() {
-   for year in $NOTES_DIR/MS$1; do
-      for module in $year/mod$2; do
-         cd "$module"
+   for year in $NOTES_DIR/year$1; do
+      for quarter in $year/q$2; do
+         cd "$quarter"
          notes=$(getnotes)
-         output_file="$module/"$(basename "$module")
+         output_file="$quarter/"$(basename "$quarter")
 
          oldifs=$IFS
          IFS=$'\n'
@@ -73,11 +71,11 @@ makenotes() {
          cd - &>/dev/null
       done
       cd "$year"
-      echo "Compiling MS${year}.pdf..."
+      echo "Compiling ${year}.pdf..."
       gs -sDEVICE=pdfwrite \
          -dQUIET \
          -o "$(basename $year).pdf" \
-         mod*/*.pdf &&
+         q*/*.pdf &&
          echo "Created ${year}.pdf"
       cd - &>/dev/null
    done
@@ -86,13 +84,13 @@ makenotes() {
 main() {
    case "$1" in
       "all") echo "Compiling all notes..." && makenotes "*" "*"; exit 0;;
-      '') echo "Compiling MS$YEAR/mod${MODULE}..." && makenotes $YEAR $MODULE; exit 0;;
+      '') echo "Compiling year$YEAR/q${QUARTER}..." && makenotes $YEAR $QUARTER; exit 0;;
       [0-9]*)
-         if [[ "$2" = [0-9]* ]]; then
-            echo "Compiling MS$1/mod${2}..."
+         if [[ "$2" = [1-4]* ]]; then
+            echo "Compiling year$1/q${2}..."
             makenotes "$1" "$2"
          elif [[ "$2" == "" ]]; then
-            echo "Compiling MS${1}..."
+            echo "Compiling year${1}..."
             makenotes "$1" "*"
          else
             usage; exit 1
